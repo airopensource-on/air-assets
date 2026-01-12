@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIR — Camera First App</title>
+  <style>
+    :root{
+      --bg:#000;--ui:#0b0b0b;--ui-soft:#141414;--text:#fff;--muted:#9aa0a6;--accent:#ff2d55;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui}
+
+    .app{position:fixed;inset:0;overflow:hidden;background:#000}
+    video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+
+    .top{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:16px;z-index:10}
+    .brand{font-weight:600}
+    .close{font-size:22px;opacity:.8;cursor:pointer}
+
+    .controls{position:absolute;left:0;right:0;bottom:24px;display:flex;justify-content:center;align-items:center;gap:28px;z-index:10}
+    .btn{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);cursor:pointer}
+    .record{width:74px;height:74px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px rgba(255,45,85,.35)}
+    .record.active{background:#fff}
+
+    
+    input[type=file]{display:none}
+
+    .preview{position:absolute;inset:0;background:#000;display:none;z-index:20}
+    .preview video{object-fit:contain}
+    .preview video.flip{transform:scaleX(-1)}
+    .preview-controls{position:absolute;bottom:24px;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:0 24px}
+    .flip-btn{position:absolute;top:20px;right:20px;padding:10px 12px;border-radius:50%;background:rgba(0,0,0,.6);cursor:pointer;font-size:16px}
+    .pill{padding:10px 16px;border-radius:999px;background:rgba(0,0,0,.6);cursor:pointer;font-size:14px}
+    .pill.primary{background:var(--accent);color:#000}
+
+    .fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:24px}
+  </style>
+</head>
+<body>
+<div class="app">
+  <video id="cam" autoplay muted playsinline></video>
+
+  <div class="top">
+    <div class="brand">AIR</div>
+    <div class="close">✕</div>
+  </div>
+
+  <div class="controls" id="cameraControls">
+    <div class="btn" id="btnUpload">⬆</div>
+    <div class="record" id="btnRecord"></div>
+    <div class="btn" id="btnAir">AIR</div>
+  </div>
+
+  <input id="fileInput" type="file" accept="video/*,image/*" />
+
+  <div id="fallback" class="fallback" style="display:none">Camera access denied.<br/>Upload still works.</div>
+
+  <div id="preview" class="preview">
+    <video id="previewVideo" autoplay loop></video>
+    <div class="flip-btn" id="btnFlip">⇄</div>
+    <div class="preview-controls">
+      <div class="pill" id="btnDiscard">Discard</div>
+      <div class="pill primary" id="btnConfirm">AIR It</div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+var cam=document.getElementById('cam');
+var preview=document.getElementById('preview');
+var previewVideoEl=document.getElementById('previewVideo');
+var btnFlip=document.getElementById('btnFlip');
+var btnDiscard=document.getElementById('btnDiscard');
+var btnConfirm=document.getElementById('btnConfirm');
+var fallback=document.getElementById('fallback');
+var recordBtn=document.getElementById('btnRecord');
+var uploadBtn=document.getElementById('btnUpload');
+var airBtn=document.getElementById('btnAir');
+var fileInput=document.getElementById('fileInput');
+var cameraControls=document.getElementById('cameraControls');
+
+var mode='CAMERA';
+var stream=null;
+var recording=false;
+var mediaRecorder=null;
+var chunks=[];
+
+async function initCamera(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:true});
+    cam.srcObject=stream;
+  }catch(e){fallback.style.display='flex'}
+}
+
+function setMode(m){ mode=m; }
+
+function showPreview(blob){
+  previewVideoEl.src=URL.createObjectURL(blob);
+  preview.style.display='block';
+  cameraControls.style.display='none';
+  airBtn.textContent='AIR IT';
+}
+
+function hidePreview(){
+  preview.style.display='none';
+  cameraControls.style.display='flex';
+  previewVideoEl.src='';
+  previewVideoEl.classList.remove('flip');
+  airBtn.textContent='AIR';
+}
+
+recordBtn.onclick=function(){
+  if(!stream) return;
+  if(!recording){
+    setMode('CAMERA');
+    chunks=[];
+    mediaRecorder=new MediaRecorder(stream,{mimeType:'video/webm'});
+    mediaRecorder.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+    mediaRecorder.onstop=function(){showPreview(new Blob(chunks,{type:'video/webm'}))};
+    mediaRecorder.start();
+    recording=true;
+    recordBtn.classList.add('active');
+    airBtn.textContent='STOP';
+  }else{
+    mediaRecorder.stop();
+    recording=false;
+    recordBtn.classList.remove('active');
+    airBtn.textContent='AIR';
+  }
+};
+
+uploadBtn.onclick=function(){setMode('UPLOAD');fileInput.click()};
+
+fileInput.onchange=function(){
+  if(!this.files[0]) return;
+  showPreview(this.files[0]);
+};
+
+btnDiscard.onclick=function(){hidePreview()};
+btnConfirm.onclick=function(){
+  alert('AIR posted (mock)');
+  hidePreview();
+};
+
+btnFlip.onclick=function(){previewVideoEl.classList.toggle('flip')};
+
+airBtn.onclick=function(){
+  if(preview.style.display==='block'){btnConfirm.click();return;}
+  if(recording){recordBtn.click();return;}
+  setMode('LIVE');
+  alert('AIR live — session prepared (mock)');
+};
+
+initCamera();
+</script>
+</body>
+</html>
